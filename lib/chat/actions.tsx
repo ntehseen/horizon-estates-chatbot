@@ -328,7 +328,7 @@ export const AI = createAI<AIState, UIState>({
         title
       }
 
-      await saveChat( chat )
+      await saveChat( {chat} )
     }
   }
 })
