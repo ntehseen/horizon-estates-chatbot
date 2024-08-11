@@ -117,6 +117,8 @@ async function submitUserMessage(content: string) {
   let textStream: undefined | ReturnType<typeof createStreamableValue<string>>
   let textNode: undefined | React.ReactNode
 
+  
+
   const result = await streamUI({
     model: openai('gpt-3.5-turbo'),
     initial: <SpinnerMessage />,
@@ -126,6 +128,7 @@ You are an AI-powered assistant for a real estate platform. You can help users w
   2. Assist users in finding trending properties or recent real estate events.
   3. Answer inquiries about specific properties using the available data.
   4. Offer general information about the real estate market and trends.
+  5. If someone says 'hi' or 'hello', always greet with 'Welcome to the Horizon Real Estate , how can I assist you today?'
 
   Always provide accurate information based on the data available. If unsure, direct users to a human representative for further assistance.`,
     messages: [
