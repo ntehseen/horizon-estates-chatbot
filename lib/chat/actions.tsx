@@ -2,6 +2,7 @@ import 'server-only'
 
 import {
   createAI,
+  createStreamableUI,
   getMutableAIState,
   getAIState,
   streamUI,
@@ -9,23 +10,70 @@ import {
 } from 'ai/rsc'
 import { openai } from '@ai-sdk/openai'
 
+import {
+  spinner,
+  BotCard,
+  BotMessage,
+  SystemMessage
+} from '@/components/stocks' // Update with correct imports for real estate components
+
 import { z } from 'zod'
 import {
+  formatNumber,
   runAsyncFnWithoutBlocking,
   sleep,
   nanoid
 } from '@/lib/utils'
 import { saveChat } from '@/app/actions'
+import { SpinnerMessage, UserMessage } from '@/components/stocks/message'
 import { Chat, Message } from '@/lib/types'
 import { auth } from '@/auth'
 
-async function confirmInquiry(propertyId: string, userId: string) {
+async function confirmPurchase(symbol: string, price: number, amount: number) {
   'use server'
 
   const aiState = getMutableAIState<typeof AI>()
 
+  const purchasing = createStreamableUI(
+    <div className="inline-flex items-start gap-1 md:items-center">
+      {spinner}
+      <p className="mb-2">
+        Purchasing {amount} {symbol}...
+      </p>
+    </div>
+  )
+
+  const systemMessage = createStreamableUI(null)
+
   runAsyncFnWithoutBlocking(async () => {
     await sleep(1000)
+
+    purchasing.update(
+      <div className="inline-flex items-start gap-1 md:items-center">
+        {spinner}
+        <p className="mb-2">
+          Purchasing {amount} {symbol}... working on it...
+        </p>
+      </div>
+    )
+
+    await sleep(1000)
+
+    purchasing.done(
+      <div>
+        <p className="mb-2">
+          You have successfully purchased {amount} {symbol}. Total cost:{' '}
+          {formatNumber(amount * price)}
+        </p>
+      </div>
+    )
+
+    systemMessage.done(
+      <SystemMessage>
+        You have purchased {amount} {symbol} at ${price}. Total cost ={' '}
+        {formatNumber(amount * price)}.
+      </SystemMessage>
+    )
 
     aiState.done({
       ...aiState.get(),
@@ -34,21 +82,17 @@ async function confirmInquiry(propertyId: string, userId: string) {
         {
           id: nanoid(),
           role: 'system',
-          content: `Your inquiry for property ${propertyId} has been successfully submitted. Our team will get back to you soon.`
-        },
-        {
-          id: nanoid(),
-          role: 'system',
-          content: `An inquiry for property ${propertyId} has been submitted by user ${userId}.`
+          content: `[User has purchased ${amount} ${symbol} at ${price}. Total cost = ${amount * price}]`
         }
       ]
     })
   })
 
   return {
+    purchasingUI: purchasing.value,
     newMessage: {
       id: nanoid(),
-      display: `Your inquiry for property ${propertyId} has been successfully submitted. Our team will get back to you soon.`
+      display: systemMessage.value
     }
   }
 }
@@ -75,22 +119,15 @@ async function submitUserMessage(content: string) {
 
   const result = await streamUI({
     model: openai('gpt-3.5-turbo'),
-    initial: `Processing your request...`,
+    initial: <SpinnerMessage />,
     system: `\
-    You are a real estate conversation bot and you can help users buy or rent properties, step by step. You and the user can discuss property listings, adjust filters, or place inquiries.
+You are an AI-powered assistant for a real estate platform. You can help users with the following:
+  1. Provide details about properties, including price, description, and features by accessing the integrated property database.
+  2. Assist users in finding trending properties or recent real estate events.
+  3. Answer inquiries about specific properties using the available data.
+  4. Offer general information about the real estate market and trends.
 
-Messages inside [] means that it is a system message or a user event. For example:
-
-  - “[Price of Property XYZ = $500,000]” means that a property price of XYZ is communicated to the user.
-  - “[User has changed the filter to 3 bedrooms]” means that the user has adjusted the filter to show properties with 3 bedrooms.
-
-If the user requests to see property details, provide the details.
-If the user wants to adjust search filters, provide the filter options.
-If the user wants to view trending properties, provide a list of trending properties.
-If the user wants to see recent real estate news or events, provide the relevant information.
-If the user wants to inquire about a property, confirm the inquiry submission.
-This is Year 2024, Month of August.
-`,
+  Always provide accurate information based on the data available. If unsure, direct users to a human representative for further assistance.`,
     messages: [
       ...aiState.get().messages.map((message: any) => ({
         role: message.role,
@@ -101,7 +138,7 @@ This is Year 2024, Month of August.
     text: ({ content, done, delta }) => {
       if (!textStream) {
         textStream = createStreamableValue('')
-        textNode = `${textStream.value}`
+        textNode = <BotMessage content={textStream.value} />
       }
 
       if (done) {
@@ -123,146 +160,7 @@ This is Year 2024, Month of August.
 
       return textNode
     },
-    tools: {
-      listTrendingProperties: {
-        description:
-          'List three popular properties that are currently trending.',
-        parameters: z.object({
-          properties: z.array(
-            z.object({
-              id: z.string().describe('The ID of the property'),
-              price: z.number().describe('The price of the property'),
-              description: z
-                .string()
-                .describe('A brief description of the property')
-            })
-          )
-        }),
-        generate: async function* ({ properties }) {
-          await sleep(1000)
-
-          const toolCallId = nanoid()
-
-          aiState.done({
-            ...aiState.get(),
-            messages: [
-              ...aiState.get().messages,
-              {
-                id: nanoid(),
-                role: 'assistant',
-                content: properties.map(
-                  prop =>
-                    `Property ID: ${prop.id}, Price: $${prop.price}, Description: ${prop.description}`
-                ).join('\n')
-              }
-            ]
-          })
-
-          return properties.map(
-            prop => `Property ID: ${prop.id}, Price: $${prop.price}, Description: ${prop.description}`
-          ).join('\n')
-        }
-      },
-      showPropertyDetails: {
-        description:
-          'Get the details of a specific property. Use this to show the property information to the user.',
-        parameters: z.object({
-          id: z.string().describe('The ID of the property.'),
-          price: z.number().describe('The price of the property.'),
-          description: z
-            .string()
-            .describe('A brief description of the property.')
-        }),
-        generate: async function* ({ id, price, description }) {
-          await sleep(1000)
-
-          const toolCallId = nanoid()
-
-          aiState.done({
-            ...aiState.get(),
-            messages: [
-              ...aiState.get().messages,
-              {
-                id: nanoid(),
-                role: 'assistant',
-                content: `Property ID: ${id}, Price: $${price}, Description: ${description}`
-              }
-            ]
-          })
-
-          return `Property ID: ${id}, Price: $${price}, Description: ${description}`
-        }
-      },
-      showPropertyInquiryForm: {
-        description:
-          'Show the UI to submit an inquiry for a property. Use this if the user wants to inquire about a property.',
-        parameters: z.object({
-          propertyId: z
-            .string()
-            .describe(
-              'The ID of the property the user wants to inquire about.'
-            ),
-          userId: z
-            .string()
-            .describe('The ID of the user submitting the inquiry.')
-        }),
-        generate: async function* ({ propertyId, userId }) {
-          const toolCallId = nanoid()
-
-          aiState.done({
-            ...aiState.get(),
-            messages: [
-              ...aiState.get().messages,
-              {
-                id: nanoid(),
-                role: 'assistant',
-                content: `Submitting inquiry for property ${propertyId} by user ${userId}...`
-              }
-            ]
-          })
-
-          return `Submitting inquiry for property ${propertyId} by user ${userId}...`
-        }
-      },
-      getRealEstateEvents: {
-        description:
-          'List recent real estate news or events between user-highlighted dates.',
-        parameters: z.object({
-          events: z.array(
-            z.object({
-              date: z
-                .string()
-                .describe('The date of the event, in ISO-8601 format'),
-              headline: z.string().describe('The headline of the event'),
-              description: z.string().describe('The description of the event')
-            })
-          )
-        }),
-        generate: async function* ({ events }) {
-          await sleep(1000)
-
-          const toolCallId = nanoid()
-
-          aiState.done({
-            ...aiState.get(),
-            messages: [
-              ...aiState.get().messages,
-              {
-                id: nanoid(),
-                role: 'assistant',
-                content: events.map(
-                  event => `Event Date: ${event.date}, Headline: ${event.headline}, Description: ${event.description}`
-                ).join('\n')
-              }
-            ]
-          })
-
-          return events.map(
-            event => `Event Date: ${event.date}, Headline: ${event.headline}, Description: ${event.description}`
-          ).join('\n')
-        }
-      }
-    }
+    tools: {} // No stock-related tools
   })
 
   return {
@@ -284,7 +182,7 @@ export type UIState = {
 export const AI = createAI<AIState, UIState>({
   actions: {
     submitUserMessage,
-    confirmInquiry
+    confirmPurchase
   },
   initialUIState: [],
   initialAIState: { chatId: nanoid(), messages: [] },
@@ -297,7 +195,7 @@ export const AI = createAI<AIState, UIState>({
       const aiState = getAIState() as Chat
 
       if (aiState) {
-        const uiState = getUIStateFromAIState{(aiState)
+        const uiState = getUIStateFromAIState(aiState)
         return uiState
       }
     } else {
@@ -321,21 +219,31 @@ export const AI = createAI<AIState, UIState>({
 
       const chat: Chat = {
         id: chatId,
+        title,
         userId,
         createdAt,
         messages,
-        path,
-        title
+        path
       }
 
-      await saveChat( {chat} )
+      await saveChat(chat)
+    } else {
+      return
     }
   }
 })
 
-function getUIStateFromAIState(aiState: AIState): UIState {
-  return aiState.messages.map(message => ({
-    id: message.id,
-    display: `${message.role.toUpperCase()}: ${message.content}`
-  }))
+export const getUIStateFromAIState = (aiState: Chat) => {
+  return aiState.messages
+    .filter(message => message.role !== 'system')
+    .map((message, index) => ({
+      id: `${aiState.chatId}-${index}`,
+      display:
+        message.role === 'user' ? (
+          <UserMessage>{message.content as string}</UserMessage>
+        ) : message.role === 'assistant' &&
+          typeof message.content === 'string' ? (
+          <BotMessage content={message.content} />
+        ) : null
+    }))
 }

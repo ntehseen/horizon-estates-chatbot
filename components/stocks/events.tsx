@@ -1,14 +1,12 @@
-// components/real-estate/events.tsx
-
 import { format, parseISO } from 'date-fns'
 
-interface RealEstateEvent {
+interface Event {
   date: string
   headline: string
   description: string
 }
 
-export function Events({ props: events }: { props: RealEstateEvent[] }) {
+export function Events({ props: events }: { props: Event[] }) {
   return (
     <div className="-mt-2 flex w-full flex-col gap-2 py-4">
       {events.map(event => (

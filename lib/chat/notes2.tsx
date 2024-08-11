@@ -16,16 +16,16 @@ import {
   BotMessage,
   SystemMessage,
   Property
-} from '@/components/real-estate'
+} from '@/components/stocks'
 
-import { InquiryForm } from '@/components/real-estate/inquiry-form'
+import { InquiryForm } from '@/components/stocks/inquiry-form'
 
 import { z } from 'zod'
-import { EventsSkeleton } from '@/components/real-estate/events-skeleton'
-import { Events } from '@/components/real-estate/events'
-import { PropertiesSkeleton } from '@/components/real-estate/properties-skeleton'
-import { Properties } from '@/components/real-estate/properties'
-import { PropertySkeleton } from '@/components/real-estate/property-skeleton'
+import { EventsSkeleton } from '@/components/stocks/events-skeleton'
+import { Events } from '@/components/stocks/events'
+import { PropertiesSkeleton } from '@/components/stocks/stocks-skeleton'
+import { Properties } from '@/components/stocks/stock'
+import { PropertySkeleton } from '@/components/stocks/stock-skeleton'
 import {
   formatNumber,
   runAsyncFnWithoutBlocking,
@@ -33,7 +33,7 @@ import {
   nanoid
 } from '@/lib/utils'
 import { saveChat } from '@/app/actions'
-import { SpinnerMessage, UserMessage } from '@/components/real-estate/message'
+import { SpinnerMessage, UserMessage } from '@/components/stocks/message'
 import { Chat, Message } from '@/lib/types'
 import { auth } from '@/auth'
 

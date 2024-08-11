@@ -1,5 +1,3 @@
-// components/real-estate/message.tsx
-
 'use client'
 
 import { IconOpenAI, IconUser } from '@/components/ui/icons'
